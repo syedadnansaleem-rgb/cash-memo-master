@@ -1,102 +1,103 @@
-# Cash Memo Generator — Phase 1 Plan
+# Cash Memo Generator — Phase 1 Specification (revised)
 
-A single internal web app that turns one total monthly expense into a set of valid, finance-compliant Cash Memos, each strictly below Rs 10,000, with exact totals and downloadable PDFs.
+A single internal web app that turns one total monthly expense into a set of Cash Memos, each strictly below Rs 10,000, with exact totals and downloadable PDFs. No backend, no login, no data leaves the browser.
 
 ## 1. Application architecture
 
-- One React + TypeScript web app (already the stack here), styled with Tailwind.
-- All calculation runs inside the app in a separate "engine" folder, kept apart from the screens. This means Phase 2 (HOD approval) can be added later without touching the maths.
-- Pieces:
-  - Screens (form, college names, results)
-  - Calculation engine (memo count, memo amounts, category split, number-to-words)
-  - Validation layer (the 10 checks) that must pass before anything is produced
-  - PDF builder (memo layout) + ZIP packer
-- No backend, no login, no database in Phase 1. Nothing is stored; you fill the form, download the PDFs, done. This is the fastest safe path and removes all setup for you.
+- React + TypeScript app styled with Tailwind.
+- Clear separation so Phase 2 can be added later without rewriting anything:
+  - Screens (details form, college names, results)
+  - Memo-count engine
+  - Memo-amount allocation engine
+  - Five-category allocation engine (rules kept in one config file)
+  - Validation engine (all 10 checks)
+  - PDF builder + ZIP packer
+- Phase 1 stores nothing: no database, no login, no cloud storage, no server upload.
 
-## 2. Database structure (designed now, built in Phase 2)
+## 2. Data structure (shape only — built in Phase 2)
 
-Not created yet, but the data is already shaped this way in code so Phase 2 just saves it:
-
-- employees (name / employee ID)
-- memo_batches (employee, date-month, total amount, created at)
-- memos (batch, serial no, college name, amount, amount in words)
-- memo_categories (memo, category name, amount)
-- Later: approvals (status, HOD, approved amount, date)
-
-Separation like this keeps one employee's records isolated once logins exist.
+Data is shaped in code as: batch (employee, date/month, total) -> memos (serial, college, amount, amount in words) -> categories (5 rows per memo). Phase 2 can persist this as-is and add an approvals table.
 
 ## 3. Phase 1 screen flow
 
 ```text
-Step 1  Details      Employee Name/ID, Date/Month, Total Expenditure  -> [CALCULATE]
-Step 2  Colleges     "Cash Memos Required: 8" + 8 name boxes          -> [GENERATE]
-Step 3  Result       green validation summary, memo list with amounts
-                     [DOWNLOAD ALL (ZIP)]  +  per-memo [PDF] buttons
-                     [START NEW BATCH]
+Step 1  Details    Employee Name/ID, Date/Month, Total Expenditure  -> [CALCULATE CASH MEMOS]
+Step 2  Colleges   "Cash Memos Required: 8" + exactly 8 name boxes  -> [GENERATE CASH MEMOS]
+Step 3  Result     validation summary + memo list
+                   [DOWNLOAD ALL (ZIP)] + per-memo [DOWNLOAD PDF]
+                   [START NEW BATCH]
 ```
-Back buttons on steps 2 and 3. Generate stays disabled until every college name is filled.
 
-## 4. Memo-count algorithm
+## 4. Memo-count algorithm (fixed before college names are asked)
 
-memoCount = ceiling(total / 9999). Example: 75,000 / 9,999 = 7.50 -> 8 memos. 9,999 -> 1 memo. 10,000 -> 2 memos.
+memoCount = CEILING(total / 9999)
 
-## 5. Memo-allocation algorithm (exact, never off by Rs 1)
+1,000 -> 1 | 5,000 -> 1 | 9,999 -> 1 | 10,000 -> 2 | 20,000 -> 3 | 40,000 -> 5 | 75,000 -> 8 | 90,000 -> 10 | 100,000 -> 11
 
-All maths is done in whole rupees only, so rounding drift is impossible.
+The count is locked at this point. Exactly that many college fields appear, each college maps to exactly one memo and one PDF. Memos are never added or removed after the names are entered.
 
-1. Start with a base of total / memoCount for each memo.
-2. Apply a controlled variation pattern (a fixed, seeded pattern — not uncontrolled randomness) that shifts amounts up and down around the base so the memos look natural and unequal.
-3. Any leftover rupees are pushed onto memos that still have headroom, one rupee at a time, until the running sum equals the total exactly.
-4. Clamp: nothing may reach 9,999+; nothing may be 0 or less. If a memo would break a rule, the excess is moved to another memo.
-5. Final assertion: sum === total, every memo between 1 and 9,999. If not, the engine retries with a tighter pattern; it never shows a wrong result.
+## 5. Input rules
 
-## 6. Five-category allocation approach
+- Whole rupees only. `75,000.50` is rejected with: "Please enter the amount in whole rupees." Nothing is silently rounded.
+- Empty, zero, negative or non-numeric totals are rejected with plain-English messages.
+- College names are trimmed; blanks block generation.
+- Duplicate college names are never removed silently: a warning appears asking the user to confirm that the same college/event should carry more than one Cash Memo. Generation continues only after confirmation.
 
-A configuration object holds the five categories and their target weight ranges, e.g.:
+## 6. Memo-amount allocation (exact, whole rupees)
+
+Priority order enforced in code: (1) exact total, (2) every memo < 10,000, (3) correct memo count, (4) one memo per college, (5) valid category split, (6) reasonable variation — variation is always last and is never allowed to change a total.
+
+1. Base amount = total / memoCount, in whole rupees.
+2. A deterministic variation pattern shifts amounts up/down around the base so memos are unequal and non-mechanical.
+3. Clamp every memo to the range 1 .. 9,999.
+4. Distribute any remaining rupees one at a time onto memos that still have headroom until the running sum equals the total exactly.
+5. Assert sum === total and all bounds. If anything fails, the engine retries with a tighter (less varied) pattern, and finally with the plainest valid split. It never displays an invalid result.
+
+## 7. Five-category allocation — configuration NOT finalized
+
+The five categories are fixed: Sweet Box, Food, Transportation, Mic & Sound Box, Pamphlets.
+
+The allocation percentages are NOT approved and are NOT treated as Finance-approved. They live in a single clearly-marked file, e.g. `src/engine/categoryConfig.ts`, headed:
 
 ```text
-Sweet Box       18-24%
-Food            26-34%
-Transportation  16-22%
-Mic & Sound Box 14-20%
-Pamphlets        8-14%
+TEMPORARY TEST CONFIGURATION — NOT FINANCE APPROVED
+Replace with the approved allocation rules when provided.
 ```
 
-You (or I, later) can change these percentages in one place without rebuilding the app.
+The engine reads whatever weights that file holds, so swapping in the approved rules later changes nothing else in the application. The UI shows a small note that the category split is using a temporary test configuration.
 
-For each memo: pick a weight inside each range using the same deterministic pattern, convert to rupees, floor them, then hand the remaining rupees to the largest categories one by one. Every category ends positive, unequal, and the five always add to the memo total exactly.
-
-## 7. PDF generation approach
-
-- Built with pdf-lib / jsPDF (free, open source, runs in your browser — nothing is uploaded anywhere).
-- Layout reproduces the standard Cash Memo: "CASH MEMO" heading, Date, Employee Name/ID, College/School event description, the five-row expense table, Total, Amount in Words, "Billed To: Nxtwave Disruptive Technologies Pvt. Ltd." fixed at the top right (not editable), and the signature areas. No HOD block in Phase 1.
-- Files named `Cash_Memo_001_College_A.pdf`, and "Download All" bundles them into one ZIP.
-- Note: please share the handwritten memo image when you can — I will build a faithful version from the standard format now and fine-tune spacing/wording to match your sample after you send it.
+Mechanics (independent of the numbers used): weights -> rupee amounts -> whole-rupee floor -> remaining rupees handed out one at a time. Every category is positive and the five always sum exactly to that memo's amount.
 
 ## 8. Validation strategy
 
-All 10 checks run before a single PDF exists: total > 0, colleges > 0, college count = memo count, every memo > 0, every memo < 10,000, sum = total, exactly 5 categories, categories sum = memo total, words match the number, no missing field. Failure = no PDFs plus a plain-English message such as "Please enter all required college names."
+Ten checks run before any PDF exists: total > 0; colleges > 0; college count = memo count; every memo > 0; every memo < 10,000; sum of memos = original total; exactly five categories per memo; categories sum = memo total; amount in words matches the number; no missing field. Any failure means no PDFs plus a clear message such as "Calculation validation failed. No memo was generated."
 
-Also handled: blank total, negative, decimals (rounded to whole rupees with a notice), duplicate college names (allowed, with a gentle warning), very large totals, and single-college cases.
+## 9. Cash Memo format
 
-## 9. Security approach
+The memo layout will follow your handwritten Cash Memo image as the primary visual reference: heading, date, employee details, college/school event line, expense table with the five categories, total, amount in words, signature areas, and "Billed To: Nxtwave Disruptive Technologies Pvt. Ltd." fixed at the top-right and never editable. No HOD fields in Phase 1.
 
-Phase 1 stores nothing and sends nothing to any server, so there is no data to leak. No keys or passwords in the app. When Phase 2 adds saving and HOD approval, I will turn on Lovable Cloud with company-email login and per-employee access rules so no one sees another person's memos.
+Note: the image has not arrived in this chat yet. Please attach it; if it is not available when I start, I will build the standard layout above and adjust it to match your sample as soon as you send it.
 
-## 10. Step-by-step implementation plan (nothing for you to code)
+## 10. PDF and ZIP
 
-1. Build the app shell and Screen 1 form.
-2. Build and self-test the memo-count engine.
-3. Build the exact memo-amount engine.
-4. Build the five-category engine.
-5. Build the Cash Memo PDF template.
-6. Wire the engines to the PDF builder.
-7. Add Download All (ZIP) and individual downloads.
-8. Run the full test list (1,000 / 3,000 / 5,000 / 8,000 / 9,999 / 10,000 / 20,000 / 40,000 / 55,000 / 75,000 / 90,000 / 100,000 / 153,000 plus the edge cases) as automated tests and report the results to you.
+Generated in the browser with an open-source PDF library. Files named `Cash_Memo_001_College_A.pdf` etc. "Download All" produces one ZIP; each memo also has its own download button.
 
-Your only job: open the preview, type three values, click two buttons, download.
+## 11. Testing before Phase 1 is called complete
 
-## What I need from you
+Automated tests over 1,000 / 3,000 / 5,000 / 8,000 / 9,999 / 10,000 / 20,000 / 40,000 / 55,000 / 75,000 / 90,000 / 100,000 / 153,000, each verifying memo count, field count, every memo in range, exact total, five categories per memo, exact category sums, correct words, and successful PDF generation. Plus edge cases: empty, negative, decimal, missing names, duplicates, very large total, one college, many colleges. If any test fails, Phase 1 is not complete.
 
-- Confirm this plan, and send the handwritten Cash Memo photo whenever convenient.
-- Confirm you are happy with no login/database in Phase 1 (fastest, zero setup), or say if you want records saved from day one.
+## 12. Build order (I will explain each stage in plain language before moving on)
+
+1. UI shell and Screen 1
+2. Memo count engine
+3. Memo amount allocation engine
+4. Validation engine
+5. Five-category allocation engine (temporary config)
+6. Cash Memo PDF template
+7. PDF generation
+8. ZIP generation
+9. Full test run and report
+
+## 13. Out of scope for Phase 1
+
+HOD approval, approved amount, HOD signature, approval dashboard, Finance approval, reimbursement workflow, Finance integration, employee login/database.
