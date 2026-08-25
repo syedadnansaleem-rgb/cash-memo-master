@@ -72,11 +72,47 @@ Mechanics (independent of the numbers used): weights -> rupee amounts -> whole-r
 
 Ten checks run before any PDF exists: total > 0; colleges > 0; college count = memo count; every memo > 0; every memo < 10,000; sum of memos = original total; exactly five categories per memo; categories sum = memo total; amount in words matches the number; no missing field. Any failure means no PDFs plus a clear message such as "Calculation validation failed. No memo was generated."
 
-## 9. Cash Memo format
+## 9. Cash Memo format (from your uploaded memo — authoritative)
 
-The memo layout will follow your handwritten Cash Memo image as the primary visual reference: heading, date, employee details, college/school event line, expense table with the five categories, total, amount in words, signature areas, and "Billed To: Nxtwave Disruptive Technologies Pvt. Ltd." fixed at the top-right and never editable. No HOD fields in Phase 1.
+The PDF reproduces the uploaded memo, not a generic design:
 
-Note: the image has not arrived in this chat yet. Please attach it; if it is not available when I start, I will build the standard layout above and adjust it to match your sample as soon as you send it.
+```text
+                        CASH MEMO            (centered, bold, underlined)
+
+Date : 08-Jun-2026                 Billed To: Nxtwave Disruptive
+Name : Ravinder Jangili                       Technologies Pvt. Ltd.
+Phone No : 9908770424
+Address : Gachibowli, Hyderabad
+
++-------+---------------------------------+--------+----------+--------+
+| S No. |          Description            | Price  | Quantity | Amount |
++-------+---------------------------------+--------+----------+--------+
+|       | NIAT offline marketing event    |        |          |        |
+|       | at <College/School Name>        |        |          |        |
+|       |     Sweet box        -          |  2240  |          |  2240  |
+|       |     Food             -          |  4343  |          |  4343  |
+|       |     Transportation   -          |  1366  |          |  1366  |
+|       |     Mic & Sound box  -          |   826  |          |   826  |
+|       |     Pamphlets        -          |   496  |          |   496  |
++-------+---------------------------------+--------+----------+--------+
+
+Given            +-----------------+---------------------------------+
+Cash.            | Total           |  9271 /-                        |
+                 +-----------------+---------------------------------+
+                 | Amount in Words | Nine Thousand Two Hundred       |
+                 |                 | Seventy One Only                |
+                 +-----------------+---------------------------------+
+
+                                              ______________________
+                                                    Signature
+```
+
+Preserved exactly: centered underlined "CASH MEMO" heading; Date / Name / Phone No / Address stacked at the left; "Billed To: Nxtwave Disruptive Technologies Pvt. Ltd." fixed at the top right and never editable; the boxed table with S No. / Description / Price / Quantity / Amount columns; the event description line followed by the five indented category rows with amounts in both Price and Amount columns; the "Given Cash." note at the lower left; the boxed Total and Amount in Words rows on the right; a blank signature line labelled "Signature" at the bottom right. Quantity is left blank as in the original. No HOD approval block anywhere.
+
+One open item: the original memo shows Phone No and Address. I will add them as two optional fields on the details screen (entered once, reused on every memo) so the layout matches. Tell me if you would rather leave those two lines blank.
+
+I will render a sample PDF and show you a picture of it for side-by-side comparison before wiring the rest of the app to it.
+
 
 ## 10. PDF and ZIP
 
